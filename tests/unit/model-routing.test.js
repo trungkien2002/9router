@@ -12,12 +12,25 @@ async function setupDb() {
 
   const { createProviderNode } = await import("@/models/index.js");
   const { getModelInfo } = await import("@/sse/services/model.js");
+  const { getAdapter } = await import("@/lib/db/driver.js");
+  const adapter = await getAdapter();
 
   return {
     createProviderNode,
     getModelInfo,
     cleanup() {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      // Windows cannot remove an open SQLite fixture. Close only this test's
+      // adapter and clear the singleton so the next case uses its own DATA_DIR.
+      const target = path.resolve(tempDir);
+      if (path.dirname(target) !== path.resolve(os.tmpdir()) || !path.basename(target).startsWith("9router-model-routing-")) {
+        throw new Error("Refusing to remove a non-fixture path");
+      }
+      adapter.close();
+      if (global._dbAdapter?.instance === adapter) {
+        global._dbAdapter.instance = null;
+        global._dbAdapter.initPromise = null;
+      }
+      fs.rmSync(target, { recursive: true, force: true });
     },
   };
 }

@@ -16,7 +16,7 @@ const STRIP_HEADERS = new Set([
  * Send body to 9Router at the given path and return the fetch Response object.
  * Optionally forwards client headers (stripped of hop-by-hop / overridden keys).
  */
-async function fetchRouter(openaiBody, path = "/v1/chat/completions", clientHeaders = {}) {
+async function fetchRouter(openaiBody, path = "/v1/chat/completions", clientHeaders = {}, signal) {
   const forwarded = {};
   for (const [k, v] of Object.entries(clientHeaders)) {
     if (!STRIP_HEADERS.has(k.toLowerCase())) forwarded[k] = v;
@@ -24,6 +24,7 @@ async function fetchRouter(openaiBody, path = "/v1/chat/completions", clientHead
 
   const response = await fetch(`${ROUTER_BASE}${path}`, {
     method: "POST",
+    signal,
     headers: {
       ...forwarded,
       "Content-Type": "application/json",

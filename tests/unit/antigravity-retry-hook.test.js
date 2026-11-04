@@ -15,6 +15,10 @@ function res(status, headers = {}, body = null) {
 describe("antigravity computeRetryDelay hook (D3)", () => {
   const ag = new AntigravityExecutor();
 
+  it("does not repeat a full header timeout on the same account",()=>{
+    expect(ag.shouldRetryConnectTimeout()).toBe(false);
+  });
+
   it("uses Retry-After header (seconds → ms) when within cap", async () => {
     expect(await ag.computeRetryDelay(res(429, { "retry-after": "5" }), 1)).toBe(5000);
   });
@@ -35,6 +39,10 @@ describe("antigravity computeRetryDelay hook (D3)", () => {
 
   it("503 without retry info → transient backoff", async () => {
     expect(await ag.computeRetryDelay(res(503), 1)).toBe(2000);
+  });
+
+  it("hands explicit model capacity refusal to account fallback without repeating it", async () => {
+    expect(await ag.computeRetryDelay(res(503, {}, {error:{message:"No capacity available for model gemini-3.8-flash-medium on the server"}}), 1)).toBe(false);
   });
 
   it("retries Antigravity agent terminated body even when status is not 429", async () => {

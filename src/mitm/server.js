@@ -7,10 +7,11 @@ const dns = require("dns");
 const { promisify } = require("util");
 const { execSync } = require("child_process");
 const { log, err, dumpRequest, createResponseDumper, clearDumpDir } = require("./logger");
-const { IS_DEV, LSOF_BIN, TARGET_HOSTS, URL_PATTERNS, MODEL_SYNONYMS, MODEL_PATTERNS, MODEL_NO_MAP, getToolForHost, isChatRequest, extractModel } = require("./config");
+const { IS_DEV, LSOF_BIN, TARGET_HOSTS, URL_PATTERNS, MODEL_NO_MAP, getToolForHost, isChatRequest, extractModel } = require("./config");
 const { DATA_DIR, MITM_DIR } = require("./paths");
 const { generateCert, getCertForDomain } = require("./cert/generate");
 const { getMitmAlias } = require("./dbReader");
+const { resolveMappedModel } = require("./modelMapping");
 const { applyAntigravityIdeVersionOverride } = require("./antigravityIdeVersion");
 const LOCAL_PORT = 443;
 const IS_WIN = process.platform === "win32";
@@ -97,24 +98,7 @@ function collectBodyRaw(req) {
 }
 
 function getMappedModel(tool, model) {
-  if (!model) return null;
-  try {
-    const aliases = getMitmAlias(tool);
-    if (!aliases) return null;
-    // Normalize via synonym map (e.g., public AG names -> backend model ids)
-    const normalizedModel = String(model).replace(/^models\//, "");
-    const lookup = MODEL_SYNONYMS?.[tool]?.[normalizedModel] || normalizedModel;
-    if (aliases[lookup]) return aliases[lookup];
-    // Prefix match fallback
-    const prefixKey = Object.keys(aliases).find(k => k && aliases[k] && (lookup.startsWith(k) || k.startsWith(lookup)));
-    if (prefixKey) return aliases[prefixKey];
-    // Pattern fallback: catches AG renamed variants (e.g. deprecated pro IDs → gemini-pro-agent)
-    const patterns = MODEL_PATTERNS?.[tool] || [];
-    for (const { match, alias } of patterns) {
-      if (match.test(lookup) && aliases[alias]) return aliases[alias];
-    }
-    return null;
-  } catch { return null; }
+  return resolveMappedModel(tool, model, getMitmAlias(tool));
 }
 
 /**
@@ -333,6 +317,9 @@ const server = https.createServer(sslOptions, async (req, res) => {
     if (!mappedModel) {
       return passthrough(req, res, bodyBuffer);
     }
+
+    // Metadata only: preserve routing attribution without recording body/auth.
+    log(`[route] ${tool} ${JSON.stringify(String(model).slice(0, 160))} -> ${JSON.stringify(mappedModel.slice(0, 160))}`);
 
     return handlers[tool].intercept(req, res, bodyBuffer, mappedModel, passthrough);
   } catch (e) {

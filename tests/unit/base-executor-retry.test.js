@@ -21,7 +21,30 @@ function makeExec(config) {
 
 const creds = { apiKey: "k" };
 
-beforeEach(() => fetchMock.mockReset());
+beforeEach(() => { fetchMock.mockReset(); });
+
+describe("BaseExecutor cancellation and header deadline",()=>{
+  it("does not mistake a local header timeout for a client cancellation",async()=>{
+    const ex=makeExec({baseUrl:"https://fixture.invalid",timeoutMs:15,retry:{502:{attempts:0}}});
+    fetchMock.mockImplementation((_url,{signal})=>new Promise((_,reject)=>signal.addEventListener("abort",()=>reject(new DOMException("abort","AbortError")),{once:true})));
+    await expect(ex.execute({model:"m",body:{},stream:false,credentials:creds})).rejects.toMatchObject({name:"TimeoutError",code:"FETCH_CONNECT_TIMEOUT"});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it("stops during backoff without another fetch or endpoint fallback",async()=>{
+    const c=new AbortController();const reason=new Error("client cancel");
+    const ex=makeExec({baseUrls:["https://a.invalid","https://b.invalid"],retry:{503:{attempts:3,delayMs:60000}}});
+    fetchMock.mockImplementationOnce(async()=>{setTimeout(()=>c.abort(reason),5);return res(503);});
+    await expect(ex.execute({model:"m",body:{},stream:false,credentials:creds,signal:c.signal})).rejects.toBe(reason);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it("honors an executor veto on repeating a full header timeout",async()=>{
+    const ex=makeExec({baseUrls:["https://a.invalid","https://b.invalid"],timeoutMs:15,retry:{502:{attempts:3,delayMs:0}}});
+    ex.shouldRetryConnectTimeout=()=>false;
+    fetchMock.mockImplementation((_url,{signal})=>new Promise((_,reject)=>signal.addEventListener("abort",()=>reject(signal.reason),{once:true})));
+    await expect(ex.execute({model:"m",body:{},stream:false,credentials:creds})).rejects.toMatchObject({code:"FETCH_CONNECT_TIMEOUT"});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("BaseExecutor.execute — retry by status (config-driven)", () => {
   it("retries 502 `attempts` times then succeeds", async () => {

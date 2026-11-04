@@ -37,6 +37,26 @@ vi.mock("@/lib/usageDb.js", () => ({
 
 const { handleChatCore } = await import("../../open-sse/handlers/chatCore.js");
 
+describe("handleChatCore caller cancellation", () => {
+  const options = signal => ({
+    body:{model:"gpt-4o",stream:false,messages:[{role:"user",content:"fixture"}]},
+    modelInfo:{provider:"openai",model:"gpt-4o"},credentials:{apiKey:"fixture",providerSpecificData:{}},
+    log:{debug:vi.fn(),info:vi.fn(),warn:vi.fn()},clientRawRequest:{signal,headers:{}},connectionId:"fixture",
+  });
+  it("never executes an already-cancelled request",async()=>{
+    executeMock.mockClear();const c=new AbortController();c.abort();
+    const result=await handleChatCore(options(c.signal));expect(result.status).toBe(499);expect(executeMock).not.toHaveBeenCalled();
+  });
+  it("propagates client cancel to an executor waiting for headers",async()=>{
+    const c=new AbortController();
+    executeMock.mockImplementationOnce(({signal})=>new Promise((_,reject)=>{
+      signal.addEventListener("abort",()=>reject(signal.reason),{once:true});
+      queueMicrotask(()=>c.abort(new Error("fixture cancel")));
+    }));
+    const result=await handleChatCore(options(c.signal));expect(result.status).toBe(499);
+  });
+});
+
 describe("handleChatCore Headroom diagnostics", () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -111,6 +111,10 @@ function buildIdeRequestId({ body, request, credentials, model, requestType }) {
 }
 
 export class AntigravityExecutor extends BaseExecutor {
+  // One full header deadline is enough for this account. Let the handler try
+  // another eligible account instead of spending four 60s waits here.
+  shouldRetryConnectTimeout() { return false; }
+
   constructor() {
     super("antigravity", PROVIDERS.antigravity);
   }
@@ -470,6 +474,10 @@ export class AntigravityExecutor extends BaseExecutor {
     }
 
     const errorMessage = this.extractErrorMessage(errorJson, bodyText);
+
+    // Explicit per-model capacity refusal should reach account fallback now,
+    // not repeat several potentially slow calls on the same connection.
+    if (/no\s+capacity\s+available\s+for\s+model/i.test(errorMessage)) return false;
 
     if (!retryMs) {
       retryMs = this.parseRetryFromErrorMessage(errorMessage);
