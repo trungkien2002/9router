@@ -8,6 +8,7 @@ import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import { cleanJSONSchemaForAntigravity, normalizeGeminiContents } from "../translator/formats/gemini.js";
 import { DEFAULT_THINKING_AG_SIGNATURE } from "../config/defaultThinkingSignature.js";
 import { getGeminiThoughtSignatureSync } from "../services/thoughtSignatureStore.js";
+import { antigravityHeadersTimeout } from "../utils/antigravityPrefillTimeout.js";
 
 // Sanitize function name: Gemini requires [a-zA-Z_][a-zA-Z0-9_.:\-]{0,63}
 function sanitizeFunctionName(name) {
@@ -114,6 +115,11 @@ export class AntigravityExecutor extends BaseExecutor {
   // One full header deadline is enough for this account. Let the handler try
   // another eligible account instead of spending four 60s waits here.
   shouldRetryConnectTimeout() { return false; }
+
+  getResponseHeadersTimeoutMs({ model, body, defaultTimeoutMs }) {
+    return antigravityHeadersTimeout(model, body, defaultTimeoutMs,
+      process.env.ANTIGRAVITY_AGENT_HEADERS_TIMEOUT_MS);
+  }
 
   constructor() {
     super("antigravity", PROVIDERS.antigravity);
