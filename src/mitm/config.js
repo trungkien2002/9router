@@ -52,6 +52,7 @@ function isChatRequest(tool, req) {
 const MODEL_SYNONYMS = {
   antigravity: {
     "gemini-default": "gemini-3.8-flash-medium",
+    "gemini-4-carbon": "gemini-4-carbon-medium",
     "gemini-3.5-flash-high": "gemini-3.8-flash-high",
     "gemini-3.5-flash-medium": "gemini-3.8-flash-medium",
     "gemini-3.5-flash-low": "gemini-3.8-flash-low",
@@ -174,14 +175,15 @@ function extractModel(url, body) {
     }
     const model = urlModel || parsed.model || null;
     const cleanModelName = String(model).replace(/^models\//, "");
-    if (/^gemini-3\.[678]-flash(?:-tiered)?$/.test(cleanModelName)) {
+    const isCarbonBase = cleanModelName === "gemini-4-carbon";
+    if (isCarbonBase || /^gemini-3\.[678]-flash(?:-tiered)?$/.test(cleanModelName)) {
       const ver = cleanModelName.includes("3.8") ? "3.8" : cleanModelName.includes("3.7") ? "3.7" : "3.6";
       const rawLevel = parsed.request?.generationConfig?.thinkingConfig?.thinkingLevel
         || parsed.generationConfig?.thinkingConfig?.thinkingLevel;
       const level = ["high", "medium", "low"].includes(String(rawLevel).toLowerCase())
         ? String(rawLevel).toLowerCase()
         : "medium";
-      return `gemini-${ver}-flash-${level}`;
+      return isCarbonBase ? `gemini-4-carbon-${level}` : `gemini-${ver}-flash-${level}`;
     }
     return model;
   } catch {

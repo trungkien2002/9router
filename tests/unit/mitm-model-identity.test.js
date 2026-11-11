@@ -5,6 +5,18 @@ const { resolveMappedModel } = require("../../src/mitm/modelMapping.js");
 const { extractModel } = require("../../src/mitm/config.js");
 
 describe("Antigravity preserves model identity", () => {
+  it("preserves Carbon thinking tiers without mapping unknown Carbon variants", () => {
+    const aliases = { "gemini-4-carbon-medium": "ag/medium", "gemini-4-carbon-high": "ag/high", "gemini-4-carbon-low": "ag/low" };
+    for (const level of ["HIGH", "MEDIUM", "LOW"]) {
+      const body = Buffer.from(JSON.stringify({ model: "gemini-4-carbon", request: { generationConfig: { thinkingConfig: { thinkingLevel: level } } } }));
+      const model = extractModel("antigravity", body, "/v1internal:streamGenerateContent");
+      expect(model).toBe(`gemini-4-carbon-${level.toLowerCase()}`);
+      expect(resolveMappedModel("antigravity", model, aliases)).toBe(`ag/${level.toLowerCase()}`);
+    }
+    expect(resolveMappedModel("antigravity", "gemini-4-carbon", aliases)).toBe("ag/medium");
+    expect(resolveMappedModel("antigravity", "gemini-4-carbon-preview", aliases)).toBeNull();
+    expect(resolveMappedModel("antigravity", "gemini-4-carbon-high", {})).toBeNull();
+  });
   const aliases = { "gemini-3.8-flash-high": "ag/high", "gemini-3.8-flash-medium": "ag/medium", "gemini-3.8-flash-low": "ag/low" };
   it("does not match a shortened request to the first high mapping", () => {
     expect(resolveMappedModel("antigravity", "gemini-3.8-flash", aliases)).toBe("ag/medium");
